@@ -38,6 +38,8 @@ function updateBadge() {
 
         tabs.forEach((tab) => {
             const windowTabCount = windowCounts[tab.windowId];
+            const windowCount = Object.keys(windowCounts).length;
+            
             const badgeText = `${windowTabCount}/${totalTabCount}`;
             chrome.action.setBadgeText({ tabId: tab.id, text: badgeText });
 
@@ -104,6 +106,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         console.log(`updating from cache...`)
 
         const windowTabCount = windowCounts[tab.windowId];
+        const windowCount = Object.keys(windowCounts).length;
+
         const badgeText = `${windowTabCount}/${totalTabCount}`;
         chrome.action.setBadgeText({ tabId: tab.id, text: badgeText });
 
