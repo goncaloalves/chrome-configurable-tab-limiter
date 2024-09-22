@@ -1,7 +1,32 @@
 const STORAGE_KEY = 'maxTabsPerWindow';
+const LIMIT_ENABLED_KEY = 'isLimitEnabled';
 let maxTabsPerWindow = 20; // Default value
+let isLimitEnabled = true; // Default value
 let windowCounts = {};
 let totalTabCount = -1;
+
+async function loadStoredSettings() {
+    try {
+        const data = await chrome.storage.local.get([STORAGE_KEY, LIMIT_ENABLED_KEY]);
+        maxTabsPerWindow = data[STORAGE_KEY] || 20;
+        isLimitEnabled = data[LIMIT_ENABLED_KEY] !== undefined ? data[LIMIT_ENABLED_KEY] : true;
+        console.log(`Loaded settings - Max Tabs: ${maxTabsPerWindow}, Limit Enabled: ${isLimitEnabled}`);
+    } catch (error) {
+        console.error('Error loading stored settings:', error);
+    }
+}
+
+async function saveSettings() {
+    try {
+        await chrome.storage.local.set({
+            [STORAGE_KEY]: maxTabsPerWindow,
+            [LIMIT_ENABLED_KEY]: isLimitEnabled
+        });
+        console.log(`Saved settings - Max Tabs: ${maxTabsPerWindow}, Limit Enabled: ${isLimitEnabled}`);
+    } catch (error) {
+        console.error('Error saving settings:', error);
+    }
+}
 
 async function getStoredMaxTabs() {
     try {
@@ -65,29 +90,26 @@ async function updateBadge() {
 
 chrome.runtime.onInstalled.addListener(async () => {
     console.log("Configurable Tab Limiter extension installed!");
-    maxTabsPerWindow = await getStoredMaxTabs();
-    console.log(`Installed - Max Tabs per Window: ${maxTabsPerWindow}`);
+    await loadStoredSettings();
     await chrome.action.setIcon({ imageData: getImageData(maxTabsPerWindow) });
     await updateBadge();
 });
 
 // Modify the tabs.onCreated listener to respect the isLimitEnabled setting
 chrome.tabs.onCreated.addListener(async (tab) => {
-    try {
-        const { isLimitEnabled } = await chrome.storage.sync.get('isLimitEnabled');
-        if (isLimitEnabled) {
+    if (isLimitEnabled) {
+        try {
             const tabs = await chrome.tabs.query({ currentWindow: true });
             if (tabs.length > maxTabsPerWindow) {
                 await chrome.tabs.remove(tab.id);
                 console.log("Tab closed! Reached the maximum limit.");
             }
+        } catch (error) {
+            console.error('Error handling new tab:', error);
         }
-        await updateBadge();
-    } catch (error) {
-        console.error('Error handling new tab:', error);
     }
+    await updateBadge();
 });
-
 chrome.tabs.onRemoved.addListener(updateBadge);
 chrome.tabs.onAttached.addListener(updateBadge);
 
@@ -119,15 +141,17 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     if (message.action === 'updateExtensionState') {
         const { isEnabled, maxTabs } = message.data;
         if (typeof isEnabled === 'boolean') {
-            await chrome.storage.sync.set({ isLimitEnabled: isEnabled });
+            isLimitEnabled = isEnabled;
         }
         if (typeof maxTabs === 'number' && maxTabs > 0) {
             maxTabsPerWindow = maxTabs;
-            await setStoredMaxTabs(maxTabsPerWindow);
-            await chrome.action.setIcon({ imageData: getImageData(maxTabsPerWindow) });
         }
+        await saveSettings();
+        await chrome.action.setIcon({ imageData: getImageData(maxTabsPerWindow) });
         await updateBadge();
     }
 });
 
+// Initial load of settings
+loadStoredSettings();
 updateBadge();
