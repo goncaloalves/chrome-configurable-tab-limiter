@@ -1,73 +1,120 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-  <title>Configurable Tab Limiter</title>
-  <style>
-
-    body{
-      background-color: #9ca3af;
-    }
-
-    h1 {
-      text-align: center;
-      width: 300px;
-      color: #020617;
-      
-    }
-
-    p {
-      text-align: center;
-      color: #0f172a;
-      font-size: 1rem;
-    }
-
-    .container {
-      display: flex; /* Make the container a flexbox */
-      justify-content: center; /* Center the content inside */
-      align-items: center; /* Vertically center the content */
-    }
-
-
-    .button-3 {
-      background-color: #4CAF50;
-      /* Green color for the button */
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      /* Indicate clickable button */
-      width: 100px;
-      
-    }
-
-    .button-3:hover {
-      /* Button hover effect */
-      background-color: #45A049;
-    }
-
-    #max-tabs-input {
-      padding: 5px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      margin-right: 10px;
-    
-      /* Add space between input and button */
-      width: 100px;
-      height: 20px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Max Tabs per Window</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+            width: 300px;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .title {
+            color: #4a4a4a;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .tab-count {
+            font-size: 36px;
+            font-weight: bold;
+            color: #3273dc;
+            margin-bottom: 15px;
+        }
+        .slider {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .switch-container {
+            display: flex;
+            align-items: center;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            margin-right: 10px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider-toggle {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider-toggle:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider-toggle {
+            background-color: #3273dc;
+        }
+        input:checked + .slider-toggle:before {
+            transform: translateX(26px);
+        }
+        .switch-label {
+            font-size: 14px;
+        }
+        button {
+            background-color: #3273dc;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #2366d1;
+        }
+    </style>
 </head>
-
 <body>
-  <h1>Max Tabs per Window</h1>
-  <p>Current limit: <span id="max-tabs-display"></span></p>
-  <div class="container">
-    <input type="number" id="max-tabs-input" min="1">
-    <button class="button-3" id="save-button">Save</button>
-  </div>
-  <script src="popup.js"></script>
+    <div class="container">
+        <div class="title">Max Tabs per Window</div>
+        <div class="tab-count"><span id="max-tabs-display">20</span> tabs</div>
+        <input type="range" id="max-tabs-input" min="1" max="100" value="20" class="slider">
+        <div class="controls">
+            <div class="switch-container">
+                <label class="switch">
+                    <input type="checkbox" id="switch-button">
+                    <span class="slider-toggle"></span>
+                </label>
+                <span class="switch-label">Enable</span>
+            </div>
+        </div>
+    </div>
+    <script src="popup.js"></script>
 </body>
-
 </html>

@@ -1,152 +1,133 @@
 const STORAGE_KEY = 'maxTabsPerWindow';
 let maxTabsPerWindow = 20; // Default value
-
-chrome.storage.sync.get(STORAGE_KEY, (data) => {
-    maxTabsPerWindow = data[STORAGE_KEY] || 20;
-});
-
 let windowCounts = {};
 let totalTabCount = -1;
 
-function getImageData(maxWindows) {
-    let canvas = new OffscreenCanvas(100, 100);;
-    let ctx = canvas.getContext("2d");
+async function getStoredMaxTabs() {
+    try {
+        const data = await chrome.storage.sync.get(STORAGE_KEY);
+        return data[STORAGE_KEY] || 20;
+    } catch (error) {
+        console.error('Error retrieving stored max tabs:', error);
+        return 20;
+    }
+}
 
-    //ctx.fillStyle = "green";
-    //ctx.fillRect(10, 10, 100, 100);
+async function setStoredMaxTabs(value) {
+    try {
+        await chrome.storage.sync.set({ [STORAGE_KEY]: value });
+    } catch (error) {
+        console.error('Error storing max tabs:', error);
+    }
+}
+
+function getImageData(maxWindows) {
+    const canvas = new OffscreenCanvas(100, 100);
+    const ctx = canvas.getContext("2d");
 
     ctx.fillStyle = "green";
     ctx.font = "normal 80px Arial";
-    ctx.fillText(maxWindows, 10, 65);
+    ctx.fillText(maxWindows.toString(), 10, 65);
 
     return ctx.getImageData(10, 10, 100, 100);
 }
 
-function updateBadge() {
-    chrome.tabs.query({}, (tabs) => {
+async function updateBadge() {
+    try {
+        const tabs = await chrome.tabs.query({});
         
-        windowCounts = {}; // Object to store window ID as key and tab count as value
-
+        windowCounts = {};
         for (const tab of tabs) {
-            if (!windowCounts.hasOwnProperty(tab.windowId)) {
-                windowCounts[tab.windowId] = 0;
-            }
-            windowCounts[tab.windowId]++; // Increment count for the tab's window
+            windowCounts[tab.windowId] = (windowCounts[tab.windowId] || 0) + 1;
         }
 
         totalTabCount = tabs.length;
 
-        tabs.forEach((tab) => {
+        for (const tab of tabs) {
             const windowTabCount = windowCounts[tab.windowId];
-            const windowCount = Object.keys(windowCounts).length;
-            
             const badgeText = `${windowTabCount}/${totalTabCount}`;
-            chrome.action.setBadgeText({ tabId: tab.id, text: badgeText });
+            await chrome.action.setBadgeText({ tabId: tab.id, text: badgeText });
 
+            let color;
             if (windowTabCount >= maxTabsPerWindow) {
-                chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#FF0000" }); // Set badge color to red
-                //console.log(`Window ${tab.windowId} - Tab ID ${tab.id} - Max Tabs per Window ${maxTabsPerWindow} - Tab Count Per Window ${tabCountPerWindow[g]} - RED`)
+                color = "#FF0000";
             } else if (windowTabCount >= maxTabsPerWindow * 0.75) {
-                chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#FFBD33" }); // Set badge color to yellow
-                //console.log(`Window ${tab.windowId} - Tab ID ${tab.id} - Max Tabs per Window ${maxTabsPerWindow} - Tab Count Per Window ${tabCountPerWindow[g]} - YELLOW`)
+                color = "#FFBD33";
             } else {
-                chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#33FF57" }); // Set badge color to green
-                //console.log(`Window ${tab.windowId} - Tab ID ${tab.id} - Max Tabs per Window ${maxTabsPerWindow} - Tab Count Per Window ${tabCountPerWindow[g]} - GREEN`)
+                color = "#33FF57";
             }
-
-        });
-    });
+            await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color });
+        }
+    } catch (error) {
+        console.error('Error updating badge:', error);
+    }
 }
 
-//
-// On Installed
-//
-
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
     console.log("Configurable Tab Limiter extension installed!");
-
-    chrome.storage.sync.get(STORAGE_KEY, (data) => {
-        maxTabsPerWindow = data[STORAGE_KEY] || 20; // Use default if not set
-        console.log(`Installed - Max Tabs per Window: ${maxTabsPerWindow}`);
-        chrome.action.setIcon({ imageData: getImageData(maxTabsPerWindow) });
-    });
-
-    updateBadge();
+    maxTabsPerWindow = await getStoredMaxTabs();
+    console.log(`Installed - Max Tabs per Window: ${maxTabsPerWindow}`);
+    await chrome.action.setIcon({ imageData: getImageData(maxTabsPerWindow) });
+    await updateBadge();
 });
 
-//
-// On Created
-//
-
-chrome.tabs.onCreated.addListener((tab) => {
-    chrome.tabs.query({ currentWindow: true }, (tabs) => { //tabs per window
-        console.log(`Tabs Length ${tabs.length}`)
-        if (tabs.length > maxTabsPerWindow) {
-            chrome.tabs.remove(tab.id);
-            console.log("Tab closed! Reached the maximum limit.");
-        }else{
-            updateBadge();
+// Modify the tabs.onCreated listener to respect the isLimitEnabled setting
+chrome.tabs.onCreated.addListener(async (tab) => {
+    try {
+        const { isLimitEnabled } = await chrome.storage.sync.get('isLimitEnabled');
+        if (isLimitEnabled) {
+            const tabs = await chrome.tabs.query({ currentWindow: true });
+            if (tabs.length > maxTabsPerWindow) {
+                await chrome.tabs.remove(tab.id);
+                console.log("Tab closed! Reached the maximum limit.");
+            }
         }
-    });
+        await updateBadge();
+    } catch (error) {
+        console.error('Error handling new tab:', error);
+    }
 });
 
-//
-// On Removed
-//
+chrome.tabs.onRemoved.addListener(updateBadge);
+chrome.tabs.onAttached.addListener(updateBadge);
 
-chrome.tabs.onRemoved.addListener((tabId, changeInfo, tab) => {
-
-    updateBadge();
-
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (totalTabCount > -1) {
-        console.log(`updating from cache...`)
+        try {
+            const windowTabCount = windowCounts[tab.windowId];
+            const badgeText = `${windowTabCount}/${totalTabCount}`;
+            await chrome.action.setBadgeText({ tabId: tab.id, text: badgeText });
 
-        const windowTabCount = windowCounts[tab.windowId];
-        const windowCount = Object.keys(windowCounts).length;
-
-        const badgeText = `${windowTabCount}/${totalTabCount}`;
-        chrome.action.setBadgeText({ tabId: tab.id, text: badgeText });
-
-        //const color = getBadgeColor(windowTabCount, maxTabsPerWindow);
-        //chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color });
-
-        if (windowTabCount >= maxTabsPerWindow) {
-            chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#FF0000" }); // Set badge color to red
-            //console.log(`Window ${tab.windowId} - Tab ID ${tab.id} - Max Tabs per Window ${maxTabsPerWindow} - Tab Count Per Window ${tabCountPerWindow[g]} - RED`)
-        } else if (windowTabCount >= maxTabsPerWindow * 0.75) {
-            chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#FFBD33" }); // Set badge color to yellow
-            //console.log(`Window ${tab.windowId} - Tab ID ${tab.id} - Max Tabs per Window ${maxTabsPerWindow} - Tab Count Per Window ${tabCountPerWindow[g]} - YELLOW`)
-        } else {
-            chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: "#33FF57" }); // Set badge color to green
-            //console.log(`Window ${tab.windowId} - Tab ID ${tab.id} - Max Tabs per Window ${maxTabsPerWindow} - Tab Count Per Window ${tabCountPerWindow[g]} - GREEN`)
+            let color;
+            if (windowTabCount >= maxTabsPerWindow) {
+                color = "#FF0000";
+            } else if (windowTabCount >= maxTabsPerWindow * 0.75) {
+                color = "#FFBD33";
+            } else {
+                color = "#33FF57";
+            }
+            await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color });
+        } catch (error) {
+            console.error('Error updating badge for tab:', error);
         }
-
-    }
-    else {
-        updateBadge();
-    }
-
-    console.log(`Updated - Max Tabs Per Window: ${maxTabsPerWindow}`)
-});
-
-//
-// On Message
-//
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'updateMaxTabs') {
-        maxTabsPerWindow = message.data.maxTabs;
-        chrome.storage.sync.set({ [STORAGE_KEY]: maxTabsPerWindow });
-        console.log(`Max tabs per window updated to: ${maxTabsPerWindow}`);
+    } else {
+        await updateBadge();
     }
 });
 
-chrome.tabs.onAttached.addListener((tabId, changeInfo, tab) => {
-
-    updateBadge();
-
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+    if (message.action === 'updateExtensionState') {
+        const { isEnabled, maxTabs } = message.data;
+        if (typeof isEnabled === 'boolean') {
+            await chrome.storage.sync.set({ isLimitEnabled: isEnabled });
+        }
+        if (typeof maxTabs === 'number' && maxTabs > 0) {
+            maxTabsPerWindow = maxTabs;
+            await setStoredMaxTabs(maxTabsPerWindow);
+            await chrome.action.setIcon({ imageData: getImageData(maxTabsPerWindow) });
+        }
+        await updateBadge();
+    }
 });
+
+updateBadge();

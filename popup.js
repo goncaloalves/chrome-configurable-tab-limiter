@@ -11,26 +11,49 @@ function getImageData(maxWindows) {
 
 
 document.addEventListener('DOMContentLoaded', () => {
-  const STORAGE_KEY = 'maxTabsPerWindow';
+  const MAX_TABS_KEY = 'maxTabsPerWindow';
+  const LIMIT_ENABLED_KEY = 'isLimitEnabled';
   const maxTabsDisplay = document.getElementById('max-tabs-display');
   const maxTabsInput = document.getElementById('max-tabs-input');
-  const saveButton = document.getElementById('save-button');
+  const switchButton = document.getElementById('switch-button');
 
-  chrome.storage.sync.get(STORAGE_KEY, (data) => {
-    maxTabsDisplay.textContent = data[STORAGE_KEY] || 20;
-    maxTabsInput.value = data[STORAGE_KEY] || 20;
+  // Load saved values
+  chrome.storage.sync.get([MAX_TABS_KEY, LIMIT_ENABLED_KEY], (data) => {
+    const savedMaxTabs = data[MAX_TABS_KEY] || 20;
+    const isLimitEnabled = data[LIMIT_ENABLED_KEY] !== undefined ? data[LIMIT_ENABLED_KEY] : true;
 
-    chrome.action.setIcon({ imageData: getImageData(maxTabsInput.value) });
+    maxTabsDisplay.textContent = savedMaxTabs;
+    maxTabsInput.value = savedMaxTabs;
+    switchButton.checked = isLimitEnabled;
+    chrome.action.setIcon({ imageData: getImageData(savedMaxTabs) });
   });
 
-  saveButton.addEventListener('click', () => {
+  maxTabsInput.addEventListener('input', () => {
     const newMax = parseInt(maxTabsInput.value);
     if (isNaN(newMax) || newMax < 1) {
       console.error('Invalid input: Please enter a number greater than 0');
       return;
     }
-    chrome.runtime.sendMessage({ action: 'updateMaxTabs', data: {maxTabs: newMax} });
-    chrome.action.setIcon({ imageData: getImageData(newMax)});
-    window.close();
+    maxTabsDisplay.textContent = newMax;
+    chrome.storage.sync.set({ [MAX_TABS_KEY]: newMax }, () => {
+      console.log('Max tabs value saved:', newMax);
+    });
+    chrome.action.setIcon({ imageData: getImageData(newMax) });
+    updateExtensionState(switchButton.checked, newMax);
   });
+
+  switchButton.addEventListener('change', () => {
+    const isLimitEnabled = switchButton.checked;
+    chrome.storage.sync.set({ [LIMIT_ENABLED_KEY]: isLimitEnabled }, () => {
+      console.log('Tab limit enabled state saved:', isLimitEnabled);
+    });
+    updateExtensionState(isLimitEnabled, parseInt(maxTabsInput.value));
+  });
+
+  function updateExtensionState(isLimitEnabled, maxTabs) {
+    chrome.runtime.sendMessage({ 
+      action: 'updateExtensionState', 
+      data: { isEnabled: isLimitEnabled, maxTabs } 
+    });
+  }
 });
